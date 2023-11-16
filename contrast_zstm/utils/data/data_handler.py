@@ -9,9 +9,14 @@ from sentence_transformers import SentenceTransformer
 from contrast_zstm.utils.data.datasets import ParallelCorpus
 
 class DataHandler:
-    def __init__(self, language1, language2):
+    def __init__(
+            self,
+            language1,
+            language2,
+            embedding_model="distiluse-base-multilingual-cased-v1"):
         self.language1 = language1
         self.language2 = language2
+        self.embedding_model = embedding_model
 
         self.input_docs1 = []
         self.input_docs2 = []
@@ -37,7 +42,7 @@ class DataHandler:
     def clear_inputs(self):
         self.input_docs1 , self.input_docs2 = [], []
     
-    def preprocess(self, vocabulary_size=2000, min_words=1):
+    def clean(self, vocabulary_size=2000, min_words=1):
         tmp_docs, vocabularies, retained_indices = [], [], []
         for i in (0, 1):
             docs = (self.input_docs1, self.input_docs2)[i]
@@ -73,11 +78,8 @@ class DataHandler:
         self.vocabulary1 = vocabularies[0]
         self.vocabulary2 = vocabularies[1]
     
-    def embed(
-            self,
-            embedding_model="distiluse-base-multilingual-cased-v1",
-            batch_size=200):
-        model = SentenceTransformer(embedding_model)
+    def embed(self, batch_size=200):
+        model = SentenceTransformer(self.embedding_model)
         self.embeddings1 = model.encode(self.raw_docs1, batch_size=batch_size)
         self.embeddings2 = model.encode(self.raw_docs2, batch_size=batch_size)
 
@@ -89,3 +91,10 @@ class DataHandler:
         return ParallelCorpus(self.embeddings1, self.embeddings2,
                               self.bow1, self.bow2,
                               self.vocabulary1, self.vocabulary2)
+
+    def embedding_dim(self):
+        return self.embeddings1[0].shape[0]
+    
+    def vocabulary_size(self, language):
+        if language == self.language1: return len(self.vocabulary1)
+        else: return len(self.vocabulary2)
