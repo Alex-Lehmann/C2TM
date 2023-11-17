@@ -7,10 +7,8 @@ class Decoder(nn.Module):
     def __init__(
             self,
             n_topics,
-            vocabulary1_size,
-            vocabulary2_size,
-            language1,
-            language2="english"):
+            vocabulary1_size, vocabulary2_size,
+            language1, language2="english"):
         super(Decoder, self).__init__()
         self.n_topics = n_topics
         self.vocabulary1_size = vocabulary1_size

@@ -11,12 +11,13 @@ from contrast_zstm.utils.data.datasets import ParallelCorpus
 class DataHandler:
     def __init__(
             self,
-            language1,
-            language2,
-            embedding_model="distiluse-base-multilingual-cased-v1"):
+            language1, language2,
+            embedding_model="distiluse-base-multilingual-cased-v1",
+            vocabulary_size=2000):
         self.language1 = language1
         self.language2 = language2
         self.embedding_model = embedding_model
+        self.vocabulary_size = vocabulary_size
 
         self.input_docs1 = []
         self.input_docs2 = []
@@ -24,12 +25,12 @@ class DataHandler:
         self.raw_docs2 = None
         self.processed_docs1 = None
         self.processed_docs2 = None
-        self.vocabulary1 = None
-        self.vocabulary2 = None
         self.embeddings1 = None
         self.embeddings2 = None
         self.bow1 = None
         self.bow2 = None
+        self.vocabulary1 = None
+        self.vocabulary2 = None
 
         nltk.download("stopwords")
         self.stop_words = (list(stopwords.words(language1)),
@@ -75,8 +76,6 @@ class DataHandler:
         self.raw_docs2 = tuple([self.input_docs2[i] for i in shared_indices])
         self.processed_docs1 = tuple([tmp_docs[0][i] for i in shared_indices])
         self.processed_docs2 = tuple([tmp_docs[1][i] for i in shared_indices])
-        self.vocabulary1 = vocabularies[0]
-        self.vocabulary2 = vocabularies[1]
     
     def embed(self, batch_size=200):
         model = SentenceTransformer(self.embedding_model)
@@ -84,17 +83,22 @@ class DataHandler:
         self.embeddings2 = model.encode(self.raw_docs2, batch_size=batch_size)
 
     def bag(self):
-        self.bow1 = CountVectorizer().fit_transform(self.processed_docs1)
-        self.bow2 = CountVectorizer().fit_transform(self.processed_docs2)
+        vectorizer1 = CountVectorizer()
+        vectorizer2 = CountVectorizer()
+
+        self.bow1 = vectorizer1.fit_transform(self.processed_docs1)
+        self.bow2 = vectorizer2.fit_transform(self.processed_docs2)
+        self.vocabulary1 = vectorizer1.get_feature_names_out()
+        self.vocabulary2 = vectorizer2.get_feature_names_out()
     
     def export_parallel(self):
         return ParallelCorpus(self.embeddings1, self.embeddings2,
                               self.bow1, self.bow2,
                               self.vocabulary1, self.vocabulary2)
 
-    def embedding_dim(self):
+    def get_embedding_dim(self):
         return self.embeddings1[0].shape[0]
     
-    def vocabulary_size(self, language):
+    def get_vocabulary_size(self, language):
         if language == self.language1: return len(self.vocabulary1)
-        else: return len(self.vocabulary2)
+        elif language == self.language2: return len(self.vocabulary2)
