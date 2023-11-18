@@ -20,31 +20,36 @@ class ContrastZSTM:
     :param n_topics: int, number of topics to learn
     :param language1: str, the first language of the training corpus
     :param language2: str, the second language of the training corpus 
-    (default "en")
+    (default "english")
+    :param transformer_type: str, the sentence transformer to use for 
+    document embedding
+    :param embedding_dim: int, the dimension of the transformer's latent
+    space
     :param hidden_sizes: tuple, sizes for each hidden layer 
     (default (100, 100))
     :param n_epochs: int, number of epochs for training (default 20)
     :param learning_rate: float, learning rate for training 
     (default 2e-3)
     :param momentum: float, momentum for training (default 0.99)
+    :param temperature: float, temperature parameter for InfoNCE loss
     """
 
     def __init__(
             self,
             n_topics,
             language1, language2="english",
-            embedding_model="distiluse-base-multilingual-cased-v1",
+            transformer_type="distiluse-base-multilingual-cased-v1",
             embedding_dim=512,
             hidden_sizes=(100, 100),
             n_epochs=20,
             batch_size=64,
             learning_rate=2e-3,
             momentum=0.99,
-            temperature=1):
+            temperature=1.0):
         self.n_topics = n_topics
         self.language1 = language1
         self.language2 = language2
-        self.embedding_model = embedding_model
+        self.transformer_type = transformer_type
         self.embedding_dim = embedding_dim
         self.hidden_sizes = hidden_sizes
         self.n_epochs = n_epochs
@@ -57,7 +62,8 @@ class ContrastZSTM:
         else: self.device = torch.device("cpu")
 
         # Model components
-        self.data_handler = DataHandler(language1, language2, embedding_model)
+        self.data_handler = DataHandler(language1, language2, transformer_type)
+        self.transformer = SentenceTransformer(transformer_type)
         self.encoder = None
         self.decoder = None
         self.optimizer = None
@@ -171,7 +177,7 @@ class ContrastZSTM:
 
         :param document: string, a document
         """
-        embedding = SentenceTransformer(self.embedding_model).encode(document)
+        embedding = self.transformer.encode(document)
         mu, _ = self.encoder.encode_single(torch.Tensor(embedding))
         theta = F.softmax(mu, dim=0)
 

@@ -12,11 +12,11 @@ class DataHandler:
     def __init__(
             self,
             language1, language2,
-            embedding_model="distiluse-base-multilingual-cased-v1",
+            embedding_type="distiluse-base-multilingual-cased-v1",
             vocabulary_size=2000):
         self.language1 = language1
         self.language2 = language2
-        self.embedding_model = embedding_model
+        self.embedding_type = embedding_type
         self.vocabulary_size = vocabulary_size
 
         self.input_docs1 = []
@@ -78,7 +78,7 @@ class DataHandler:
         self.processed_docs2 = tuple([tmp_docs[1][i] for i in shared_indices])
     
     def embed(self, batch_size=200):
-        model = SentenceTransformer(self.embedding_model)
+        model = SentenceTransformer(self.embedding_type)
         self.embeddings1 = model.encode(self.raw_docs1, batch_size=batch_size)
         self.embeddings2 = model.encode(self.raw_docs2, batch_size=batch_size)
 
