@@ -47,14 +47,12 @@ class Decoder(nn.Module):
     def forward(self, z, language):
         theta = self.dropout(F.softmax(z, dim=1))
         if language == self.language1:
-            word_dist = F.softmax(
-                self.beta1_batchnorm(torch.matmul(theta, self.beta1)), dim=1
-            )
-            self.topic_word_matrix1 = self.beta1
+            beta = F.softmax(self.beta1_batchnorm(self.beta1), dim=1)
+            self.topic_word_matrix1 = beta
+            word_dist = torch.matmul(theta, beta)
         else:
-            word_dist = F.softmax(
-                self.beta2_batchnorm(torch.matmul(theta, self.beta2)), dim=1
-            )
-            self.topic_word_matrix2 = self.beta2
+            beta = F.softmax(self.beta2_batchnorm(self.beta2), dim=1)
+            self.topic_word_matrix2 = beta
+            word_dist = torch.matmul(theta, beta)
         
         return word_dist

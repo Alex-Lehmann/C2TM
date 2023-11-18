@@ -36,3 +36,13 @@ class Encoder(nn.Module):
         log_sigma = self.f_sigma_batchnorm(self.f_sigma(x))
 
         return mu, log_sigma
+
+    def encode_single(self, x):
+        x = F.softplus(self.input(x))
+        for layer in self.hiddens:
+            x = F.softplus(layer(x))
+        x = self.dropout(x)
+        mu = self.f_mu(x)
+        log_sigma = self.f_sigma(x)
+
+        return mu, log_sigma

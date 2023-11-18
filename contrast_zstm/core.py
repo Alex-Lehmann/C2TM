@@ -2,9 +2,11 @@ import datetime
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from tqdm import tqdm
+from sentence_transformers import SentenceTransformer
 
 from contrast_zstm.utils.data.data_handler import DataHandler
 from contrast_zstm.networks.encoder import Encoder
@@ -13,7 +15,7 @@ from contrast_zstm.networks.decoder import Decoder
 
 class ContrastZSTM:
     """
-    Main class for contrastive zero-shot topic modeling.
+    Main class for contrastive zero-shot topic models.
 
     :param n_topics: int, number of topics to learn
     :param language1: str, the first language of the training corpus
@@ -51,7 +53,7 @@ class ContrastZSTM:
         self.momentum = momentum
         self.temperature = temperature
 
-        if torch.cuda.is_available: self.device = torch.device("cuda")
+        if torch.cuda.is_available(): self.device = torch.device("cuda")
         else: self.device = torch.device("cpu")
 
         # Model components
@@ -66,7 +68,8 @@ class ContrastZSTM:
     def ingest_training(self, inputs1, inputs2):
         """
         Ingest a parallel corpus for training the ContrastZSTM model. 
-        This will overwrite any prior corpus ingested by the model.
+        This will overwrite any prior corpus ingested by the model and 
+        reset the model's training.
 
         :param inputs1: list, the corpus's documents in the first
         language
@@ -79,15 +82,11 @@ class ContrastZSTM:
         self.data_handler.clean()
         self.data_handler.embed()
         self.data_handler.bag()
-
-    def init_vae(self):
-        """
-        Initialize the variational autoencoder. This should be done 
-        after document ingest.
-        """
+        
         self.encoder = Encoder(
             self.embedding_dim, self.n_topics, self.hidden_sizes
         )
+
         self.decoder = Decoder(
             self.n_topics,
             self.data_handler.get_vocabulary_size(self.language1),
@@ -141,25 +140,65 @@ class ContrastZSTM:
 
     def get_topic_words(self, language, k=10):
         """
-        Get the top k words in each topic for the passed language.
+        Get the top k words for each topic in the passed language. 
+        Returns a dictionary where words are keys and topic-word weights
+        are values.
 
         :param language: string, the language to query
-        :param k: int, number of topi words to retrieve for each topic
+        :param k: int, number of top words to retrieve for each topic
         """
         if language == self.language1:
-            beta = self.decoder.beta1
+            phi = self.decoder.topic_word_matrix1
             vocabulary = self.data_handler.vocabulary1
         elif language == self.language2:
-            beta = self.decoder.beta2
+            phi = self.decoder.topic_word_matrix2
             vocabulary = self.data_handler.vocabulary2
         
         topics = []
         for i in range(self.n_topics):
-            _, indices = torch.topk(beta[i], k)
-            words = [vocabulary[j] for j in indices.cpu().numpy()]
-            topics.append(words)
+            weights, indices = torch.topk(phi[i], k)
+            words = [vocabulary[j] for j in indices]
+            weights = [phi[i, j].item() for j in indices]
+
+            dict = {words[j]: weights[j] for j in range(len(words))}
+            topics.append(dict)
         
         return topics
+
+    def predict_topics(self, document):
+        """
+        Predict the topic distribution in the passed document.
+
+        :param document: string, a document
+        """
+        embedding = SentenceTransformer(self.embedding_model).encode(document)
+        mu, _ = self.encoder.encode_single(torch.Tensor(embedding))
+        theta = F.softmax(mu, dim=0)
+
+        return theta
+    
+    def predict_keywords(self, document, language, k=5):
+        """
+        Predict the top k most likely words for the topic mixture in the
+        passed document. Words are in the passed language.
+
+        :param document: string, a document
+        :param language: string, the language in which to return words
+        :param k: int, number of top words to retrieve
+        """
+        theta = self.predict_topics(document)
+        if language == self.language1:
+            phi = self.decoder.topic_word_matrix1
+            vocabulary = self.data_handler.vocabulary1
+        elif language == self.language2:
+            phi = self.decoder.topic_word_matrix2
+            vocabulary = self.data_handler.vocabulary2
+
+        document_word_dist = torch.matmul(theta, phi)
+        _, indices = torch.topk(document_word_dist, k)
+        keywords = [vocabulary[i] for i in indices]
+
+        return keywords
 
     @staticmethod
     def _rt(mu, log_sigma):
@@ -243,7 +282,7 @@ class ContrastZSTM:
 
         CL = self._infoNCE(z1, z2, self.temperature)
 
-        return (KL1 + KL2 - RE1 - RE2 - CL).sum()
+        return (KL1 + KL2 - RE1 - RE2 + CL).sum()
 
     def _infoNCE(self, z1, z2, tau):
         sim11 = self.similarity(z1.unsqueeze(-2), z1.unsqueeze(-3)) / tau
