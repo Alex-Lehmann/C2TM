@@ -27,7 +27,6 @@ class ContrastZSTM:
     space
     :param hidden_sizes: tuple, sizes for each hidden layer 
     (default (100, 100))
-    :param n_epochs: int, number of epochs for training (default 20)
     :param learning_rate: float, learning rate for training 
     (default 2e-3)
     :param momentum: float, momentum for training (default 0.99)
@@ -41,7 +40,6 @@ class ContrastZSTM:
             transformer_type="distiluse-base-multilingual-cased-v1",
             embedding_dim=512,
             hidden_sizes=(100, 100),
-            n_epochs=20,
             batch_size=64,
             learning_rate=2e-3,
             momentum=0.99,
@@ -52,7 +50,6 @@ class ContrastZSTM:
         self.transformer_type = transformer_type
         self.embedding_dim = embedding_dim
         self.hidden_sizes = hidden_sizes
-        self.n_epochs = n_epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.momentum = momentum
@@ -69,24 +66,25 @@ class ContrastZSTM:
         self.optimizer = None
         self.criterion = nn.CrossEntropyLoss().to(self.device)
         self.similarity = nn.CosineSimilarity(dim=-1).to(self.device)
+
         self.train_losses = []
     
     def ingest_training(self, inputs1, inputs2):
         """
         Ingest a parallel corpus for training the ContrastZSTM model. 
-        This will overwrite any prior corpus ingested by the model and 
-        reset the model's training.
+        This will overwrite any prior training corpus ingested by the 
+        model and reset the model's training.
 
         :param inputs1: list, the corpus's documents in the first
         language
         :param inputs2: list, the corpus's documents in the second
         language
         """
-        self.data_handler.clear_inputs()
+        self.data_handler.clear_training()
         for pair in tuple(zip(inputs1, inputs2)):
-            self.data_handler.add_parallel(pair)
+            self.data_handler.add_training(pair)
         self.data_handler.clean()
-        self.data_handler.embed()
+        self.data_handler.embed_training()
         self.data_handler.bag()
         
         self.encoder = Encoder(
@@ -107,14 +105,15 @@ class ContrastZSTM:
             betas=(self.momentum, 0.99)
         )
 
-    def fit(self, n_workers=1):
+    def fit(self, n_epochs=20, n_workers=1):
         """
         Train the ContrastZSTM model on the ingested documents.
 
+        :param n_epochs: int, number of epochs for training (default 20)
         :param n_workers: int, number of threads to use for loading data
         """
-        train_data = self.data_handler.export_parallel()
-        loader = DataLoader(
+        train_data = self.data_handler.export_training()
+        train_loader = DataLoader(
             train_data,
             batch_size=self.batch_size,
             shuffle=True,
@@ -123,10 +122,10 @@ class ContrastZSTM:
         )
 
         samples_processed = 0
-        progress_bar = tqdm(self.n_epochs, position=0, leave=True)
-        for epoch in range(self.n_epochs):
+        progress_bar = tqdm(n_epochs, position=0, leave=True)
+        for epoch in range(n_epochs):
             start_time = datetime.datetime.now()
-            samples, train_loss = self._train_epoch(loader)
+            samples, train_loss = self._train_epoch(train_loader)
             samples_processed += samples
             self.train_losses.append(train_loss)
             end_time = datetime.datetime.now()
@@ -135,8 +134,8 @@ class ContrastZSTM:
                 """
                 Epoch: [{}/{}]\tSeen Samples: [{}/{}]\tTrain Loss: {}\tTime: {}
                 """.format(
-                    epoch + 1, self.n_epochs,
-                    samples_processed, len(train_data) * self.n_epochs,
+                    epoch + 1, n_epochs,
+                    samples_processed, len(train_data) * n_epochs,
                     train_loss,
                     end_time - start_time
                 )

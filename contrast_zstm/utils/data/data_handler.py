@@ -19,8 +19,10 @@ class DataHandler:
         self.embedding_type = embedding_type
         self.vocabulary_size = vocabulary_size
 
-        self.input_docs1 = []
-        self.input_docs2 = []
+        self.transformer = SentenceTransformer(embedding_type)
+
+        self.train_docs1 = []
+        self.train_docs2 = []
         self.raw_docs1 = None
         self.raw_docs2 = None
         self.processed_docs1 = None
@@ -36,17 +38,22 @@ class DataHandler:
         self.stop_words = (list(stopwords.words(language1)),
                            list(stopwords.words(language2)))
     
-    def add_parallel(self, pair):
-        self.input_docs1.append(pair[0])
-        self.input_docs2.append(pair[1])
+    def add_training(self, pair):
+        self.train_docs1.append(pair[0])
+        self.train_docs2.append(pair[1])
     
-    def clear_inputs(self):
-        self.input_docs1 , self.input_docs2 = [], []
+    def clear_training(self):
+        self.train_docs1 , self.train_docs2 = [], []
+        self.raw_docs1, self.raw_docs2 = None, None
+        self.processed_docs1, self.processed_docs2 = None, None
+        self.embeddings1, self.embeddings2 = None, None
+        self.bow1, self.bow2 = None, None
+        self.vocabulary1, self.vocabulary2 = None, None
     
     def clean(self, vocabulary_size=2000, min_words=1):
         tmp_docs, vocabularies, retained_indices = [], [], []
         for i in (0, 1):
-            docs = (self.input_docs1, self.input_docs2)[i]
+            docs = (self.train_docs1, self.train_docs2)[i]
 
             docs = [deaccent(doc.lower()) for doc in docs]
             docs = [doc.translate(str.maketrans(
@@ -72,15 +79,18 @@ class DataHandler:
         
         shared_indices = [i for i in retained_indices[0]
                           if i in retained_indices[1]]
-        self.raw_docs1 = tuple([self.input_docs1[i] for i in shared_indices])
-        self.raw_docs2 = tuple([self.input_docs2[i] for i in shared_indices])
+        self.raw_docs1 = tuple([self.train_docs1[i] for i in shared_indices])
+        self.raw_docs2 = tuple([self.train_docs2[i] for i in shared_indices])
         self.processed_docs1 = tuple([tmp_docs[0][i] for i in shared_indices])
         self.processed_docs2 = tuple([tmp_docs[1][i] for i in shared_indices])
     
-    def embed(self, batch_size=200):
-        model = SentenceTransformer(self.embedding_type)
-        self.embeddings1 = model.encode(self.raw_docs1, batch_size=batch_size)
-        self.embeddings2 = model.encode(self.raw_docs2, batch_size=batch_size)
+    def embed_training(self, batch_size=200):
+        self.embeddings1 = self.transformer.encode(
+            self.raw_docs1, batch_size=batch_size
+        )
+        self.embeddings2 = self.transformer.encode(
+            self.raw_docs2, batch_size=batch_size
+        )
 
     def bag(self):
         vectorizer1 = CountVectorizer()
@@ -91,7 +101,7 @@ class DataHandler:
         self.vocabulary1 = vectorizer1.get_feature_names_out()
         self.vocabulary2 = vectorizer2.get_feature_names_out()
     
-    def export_parallel(self):
+    def export_training(self):
         return ParallelCorpus(self.embeddings1, self.embeddings2,
                               self.bow1, self.bow2,
                               self.vocabulary1, self.vocabulary2)
