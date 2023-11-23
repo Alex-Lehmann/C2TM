@@ -8,9 +8,10 @@ from torch.optim import Adam
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 
-from contrast_zstm.utils.data.data_handler import DataHandler
+from contrast_zstm.data.data_handler import DataHandler
 from contrast_zstm.networks.encoder import Encoder
 from contrast_zstm.networks.decoder import Decoder
+from contrast_zstm.training.regularizers import EarlyStopping
 
 
 class ContrastZSTM:
@@ -40,6 +41,7 @@ class ContrastZSTM:
             transformer_type="distiluse-base-multilingual-cased-v1",
             embedding_dim=512,
             hidden_sizes=(100, 100),
+            train_proportion=0.8,
             batch_size=64,
             learning_rate=2e-3,
             momentum=0.99,
@@ -50,6 +52,7 @@ class ContrastZSTM:
         self.transformer_type = transformer_type
         self.embedding_dim = embedding_dim
         self.hidden_sizes = hidden_sizes
+        self.train_proportion = train_proportion
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.momentum = momentum
@@ -68,24 +71,24 @@ class ContrastZSTM:
         self.similarity = nn.CosineSimilarity(dim=-1).to(self.device)
 
         self.train_losses = []
+        self.validation_losses = None
+
+        self.validate = False
     
-    def ingest_training(self, inputs1, inputs2):
+    def ingest_corpus(self, inputs1, inputs2):
         """
-        Ingest a parallel corpus for training the ContrastZSTM model. 
-        This will overwrite any prior training corpus ingested by the 
-        model and reset the model's training.
+        Ingest a parallel corpus for training the ContrastZSTM model.
 
         :param inputs1: list, the corpus's documents in the first
         language
         :param inputs2: list, the corpus's documents in the second
         language
         """
-        self.data_handler.clear_training()
         for pair in tuple(zip(inputs1, inputs2)):
-            self.data_handler.add_training(pair)
+            self.data_handler.add_pair(pair)
         self.data_handler.clean()
-        self.data_handler.embed_training()
-        self.data_handler.bag()
+        self.data_handler.encode()
+        self.data_handler.split(self.train_proportion)
         
         self.encoder = Encoder(
             self.embedding_dim, self.n_topics, self.hidden_sizes
@@ -120,34 +123,47 @@ class ContrastZSTM:
             num_workers=n_workers,
             drop_last=True
         )
+        val_data = self.data_handler.export_validation()
+        val_loader = DataLoader(
+            val_data,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=n_workers,
+            drop_last=True
+        )
+        stopper = EarlyStopping()
 
         samples_processed = 0
-        progress_bar = tqdm(n_epochs, position=0, leave=True)
+        progress_bar = tqdm(
+            desc="Training progress", total=n_epochs, initial=1
+        )
         for epoch in range(n_epochs):
-            start_time = datetime.datetime.now()
-            samples, train_loss = self._train_epoch(train_loader)
-            samples_processed += samples
+            train_samples, train_loss = self._train_epoch(train_loader)
+            samples_processed += train_samples
             self.train_losses.append(train_loss)
-            end_time = datetime.datetime.now()
             progress_bar.update(1)
+
+            _, val_loss = self._validation_epoch(val_loader)
+
             progress_bar.set_description(
-                """
-                Epoch: [{}/{}]\tSeen Samples: [{}/{}]\tTrain Loss: {}\tTime: {}
-                """.format(
-                    epoch + 1, n_epochs,
-                    samples_processed, len(train_data) * n_epochs,
-                    train_loss,
-                    end_time - start_time
+                "Epoch: [{}/{}]\t\tTrain loss: {}\tValidation loss: {}".format(
+                    epoch + 1,
+                    n_epochs,
+                    round(train_loss, 4),
+                    round(val_loss, 4)
                 )
             )
-        
+
+            if stopper(val_loss, self):
+                progress_bar.close()
+                print("Early stopping after {} epochs".format(epoch + 1))
+                return stopper.checkpoint_model
         progress_bar.close()
+        return self
 
     def get_topic_words(self, language, k=10):
         """
-        Get the top k words for each topic in the passed language. 
-        Returns a dictionary where words are keys and topic-word weights
-        are values.
+        Get the top k words for each topic in the passed language.
 
         :param language: string, the language to query
         :param k: int, number of top words to retrieve for each topic
@@ -161,14 +177,14 @@ class ContrastZSTM:
         
         topics = []
         for i in range(self.n_topics):
-            weights, indices = torch.topk(phi[i], k)
+            _, indices = torch.topk(phi[i], k)
             words = [vocabulary[j] for j in indices]
             weights = [phi[i, j].item() for j in indices]
 
             dict = {words[j]: weights[j] for j in range(len(words))}
             topics.append(dict)
         
-        return topics
+        return tuple(topics)
 
     def predict_topics(self, document):
         """
@@ -260,6 +276,54 @@ class ContrastZSTM:
         train_loss /= samples_processed
 
         return samples_processed, train_loss
+    
+    def _validation_epoch(self, loader):
+        # Put networks in inference mode
+        self.encoder.eval()
+        self.decoder.eval()
+        
+        val_loss = 0
+        samples_processed = 0
+
+        for batch in loader:
+            bow1 = batch["bow1"]
+            bow2 = batch["bow2"]
+            embedding1 = batch["embedding1"]
+            embedding2 = batch["embedding2"]
+
+            if torch.cuda.is_available():
+                bow1 = bow1.cuda()
+                bow2 = bow2.cuda()
+                embedding1 = embedding1.cuda()
+                embedding2 = embedding2.cuda()
+
+            # Forward pass
+            self.encoder.zero_grad()
+            self.decoder.zero_grad()
+
+            mu1, log_sigma1 = self.encoder(embedding1)
+            mu2, log_sigma2 = self.encoder(embedding2)
+            z1 = self._rt(mu1, log_sigma1)
+            z2 = self._rt(mu2, log_sigma2)
+            word_dist1 = self.decoder(z1, self.language1)
+            word_dist2 = self.decoder(z2, self.language2)
+
+            # Backward pass
+            loss = self._loss(
+                mu1, mu2,
+                log_sigma1, log_sigma2,
+                word_dist1, word_dist2,
+                bow1, bow2,
+                z1, z2
+            ).sum()
+
+            # Compute training loss
+            samples_processed += bow1.size()[0]
+            val_loss += loss.item()
+
+        val_loss /= samples_processed
+
+        return samples_processed, val_loss
     
     def _loss(
             self,
