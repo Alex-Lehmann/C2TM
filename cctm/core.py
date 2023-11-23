@@ -8,15 +8,15 @@ from torch.optim import Adam
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 
-from contrast_zstm.data.data_handler import DataHandler
-from contrast_zstm.networks.encoder import Encoder
-from contrast_zstm.networks.decoder import Decoder
-from contrast_zstm.training.regularizers import EarlyStopping
+from cctm.data.data_handler import DataHandler
+from cctm.networks.encoder import Encoder
+from cctm.networks.decoder import Decoder
+from cctm.training.regularizers import EarlyStopping
 
 
-class ContrastZSTM:
+class CCTM:
     """
-    Main class for contrastive zero-shot topic models.
+    Main class for contrastive contextualized topic models.
 
     :param n_topics: int, number of topics to learn
     :param language1: str, the first language of the training corpus
@@ -77,7 +77,7 @@ class ContrastZSTM:
     
     def ingest_corpus(self, inputs1, inputs2):
         """
-        Ingest a parallel corpus for training the ContrastZSTM model.
+        Ingest a parallel corpus for training the CCTM model.
 
         :param inputs1: list, the corpus's documents in the first
         language
@@ -110,7 +110,7 @@ class ContrastZSTM:
 
     def fit(self, n_epochs=20, n_workers=1):
         """
-        Train the ContrastZSTM model on the ingested documents.
+        Train the CCTM model on the ingested documents.
 
         :param n_epochs: int, number of epochs for training (default 20)
         :param n_workers: int, number of threads to use for loading data

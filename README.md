@@ -1,2 +1,2 @@
-# ContrastZSTM
-Cross-lingual zero-shot topic modeling using contrastive learning.
+# CCTM
+Contrastive contextualized topic models for cross-lingual topic modeling.

@@ -1,8 +1,7 @@
 class EarlyStopping:
-    def __init__(self, patience=5, delta=0, path="checkpoint.pt"):
+    def __init__(self, patience=5, delta=0):
         self.patience = patience
         self.delta = delta
-        self.path = path
 
         self.counter = 0
         self.best_loss = None
@@ -23,6 +22,5 @@ class EarlyStopping:
         
         return self.stop
     
-    # TODO: Implement model saving
     def checkpoint(self, model):
         self.checkpoint_model = model
