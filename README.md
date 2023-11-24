@@ -5,7 +5,7 @@ A Python package implementing a contrastive contextualized topic model (C2TM) fo
 1. Get the code with `git clone https://github.com/Alex-Lehmann/C2TM.git`.
 2. Load the main class with `from c2tm.core import C2TM`.
 3. Instantiate a C2TM with `model = C2TM(<number of topics>, <first language>, <second language>)`.
-4. Load a parallel training corpora with `model.ingest_corpus(<documents in first language>, <documents in second language>)`.
+4. Load a parallel training corpus with `model.ingest_corpus(<documents in first language>, <documents in second language>)`.
 5. Fit the model with `model.fit(<number of training epochs>)`.
 6. Examine the top words in each topic with `model.get_topic_words(<language for results>)`.
 
