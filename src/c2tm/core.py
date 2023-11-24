@@ -1,5 +1,3 @@
-import datetime
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,13 +6,12 @@ from torch.optim import Adam
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 
-from cctm.data.data_handler import DataHandler
-from cctm.networks.encoder import Encoder
-from cctm.networks.decoder import Decoder
-from cctm.training.regularizers import EarlyStopping
+from c2tm.data_handler import DataHandler
+from c2tm.vae import Encoder, Decoder, reparameterize
+from c2tm.early_stopping import EarlyStopping
 
 
-class CCTM:
+class C2TM:
     """
     Main class for contrastive contextualized topic models.
 
@@ -77,7 +74,7 @@ class CCTM:
     
     def ingest_corpus(self, inputs1, inputs2):
         """
-        Ingest a parallel corpus for training the CCTM model.
+        Ingest a parallel corpus for training the C2TM model.
 
         :param inputs1: list, the corpus's documents in the first
         language
@@ -220,12 +217,6 @@ class CCTM:
         keywords = [vocabulary[i] for i in indices]
 
         return keywords
-
-    @staticmethod
-    def _rt(mu, log_sigma):
-        std = torch.exp(0.5 * log_sigma)
-        eps = torch.randn_like(std)
-        return eps.mul(std).add_(mu)
     
     def _train_epoch(self, loader):
         # Put networks in training mode
@@ -253,8 +244,8 @@ class CCTM:
 
             mu1, log_sigma1 = self.encoder(embedding1)
             mu2, log_sigma2 = self.encoder(embedding2)
-            z1 = self._rt(mu1, log_sigma1)
-            z2 = self._rt(mu2, log_sigma2)
+            z1 = reparameterize(mu1, log_sigma1)
+            z2 = reparameterize(mu2, log_sigma2)
             word_dist1 = self.decoder(z1, self.language1)
             word_dist2 = self.decoder(z2, self.language2)
 
@@ -303,8 +294,8 @@ class CCTM:
 
             mu1, log_sigma1 = self.encoder(embedding1)
             mu2, log_sigma2 = self.encoder(embedding2)
-            z1 = self._rt(mu1, log_sigma1)
-            z2 = self._rt(mu2, log_sigma2)
+            z1 = reparameterize(mu1, log_sigma1)
+            z2 = reparameterize(mu2, log_sigma2)
             word_dist1 = self.decoder(z1, self.language1)
             word_dist2 = self.decoder(z2, self.language2)
 

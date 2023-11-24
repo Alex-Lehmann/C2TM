@@ -7,7 +7,7 @@ import scipy.sparse
 class ParallelCorpus(Dataset):
     """
     Class to load bags-of-words and contextualized embeddings for 
-    parallel sentence corpora. Used for training the CCTM.
+    parallel sentence corpora.
     """
 
     def __init__(

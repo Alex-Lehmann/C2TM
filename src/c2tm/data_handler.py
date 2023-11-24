@@ -8,7 +8,7 @@ from gensim.utils import deaccent
 from sklearn.feature_extraction.text import CountVectorizer
 from sentence_transformers import SentenceTransformer
 
-from cctm.data.datasets import ParallelCorpus
+from c2tm.datasets import ParallelCorpus
 
 class DataHandler:
     def __init__(

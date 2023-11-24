@@ -1,0 +1,19 @@
+[project]
+name = "c2tm"
+version = "0.0.1"
+authors = [{name="Alex Lehmann", email="alexlehmann@cmail.carleton.ca}]
+description = "A contrastive variational autoencoder model for contextualized topic modeling."
+readme = "README.md"
+requires-python = "==3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GPL-3.0",
+    "Operating System :: OS Independent"
+]
+
+[project.urls]
+Homepage = "
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
