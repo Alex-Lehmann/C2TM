@@ -68,11 +68,15 @@ class C2TM:
         self.similarity = nn.CosineSimilarity(dim=-1).to(self.device)
 
         self.train_losses = []
-        self.validation_losses = None
-
-        self.validate = False
+        self.validation_losses = []
     
-    def ingest_corpus(self, inputs1, inputs2):
+    def ingest_corpus(
+            self,
+            inputs1, inputs2,
+            vocabulary_size=2000,
+            min_words=1,
+            max_df=1.0,
+            min_df=1):
         """
         Ingest a parallel corpus for training the C2TM model.
 
@@ -80,10 +84,19 @@ class C2TM:
         language
         :param inputs2: list, the corpus's documents in the second
         language
+        :param vocabulary_size: int, the maximum number of tokens to use
+        in the learned vocabulary for each language (default 2000)
+        :param min_words: int, the minimum number of in-vocabulary words
+        a document must have (default 1)
+        :param max_df: float, the maximum document frequency for a token
+        to be included in the vocabulary (default 0.9)
+        :param min_df: float or int, the minimum document frequency a 
+        token must have (float) or number of documents a token must
+        appear in (int) to be included in the vocabulary (default 0.1)
         """
         for pair in tuple(zip(inputs1, inputs2)):
             self.data_handler.add_pair(pair)
-        self.data_handler.clean()
+        self.data_handler.clean(vocabulary_size, min_words, max_df, min_df)
         self.data_handler.encode()
         self.data_handler.split(self.train_proportion)
         
@@ -138,10 +151,11 @@ class C2TM:
             train_samples, train_loss = self._train_epoch(train_loader)
             samples_processed += train_samples
             self.train_losses.append(train_loss)
-            progress_bar.update(1)
 
             _, val_loss = self._validation_epoch(val_loader)
-
+            self.validation_losses.append(val_loss)
+            
+            progress_bar.update(1)
             progress_bar.set_description(
                 "Epoch: [{}/{}]\t\tTrain loss: {}\tValidation loss: {}".format(
                     epoch + 1,

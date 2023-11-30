@@ -53,12 +53,11 @@ class DataHandler:
         self.input_docs1.append(pair[0])
         self.input_docs2.append(pair[1])
     
-    def clean(self, vocabulary_size=2000, min_words=1):
+    def clean(self, vocabulary_size, min_words, max_df, min_df):
         tmp_docs, vocabularies, retained_indices = [], [], []
         for i in (0, 1):
             docs = (self.input_docs1, self.input_docs2)[i]
 
-            docs = [deaccent(doc.lower()) for doc in docs]
             docs = [doc.translate(str.maketrans(
                 string.punctuation, " " * len(string.punctuation)
             )) for doc in docs]
@@ -69,7 +68,9 @@ class DataHandler:
                               and w not in self.stop_words[i]])
                               for doc in docs]
             
-            vectorizer = CountVectorizer(max_features=vocabulary_size)
+            vectorizer = CountVectorizer(
+                max_features=vocabulary_size, max_df=max_df, min_df=min_df
+            )
             vectorizer.fit_transform(docs)
             vocabulary = set(vectorizer.get_feature_names_out())
             docs = [" ".join([w for w in doc.split() if w in vocabulary])
