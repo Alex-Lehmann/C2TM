@@ -143,16 +143,14 @@ class C2TM:
         )
         stopper = EarlyStopping()
 
-        samples_processed = 0
         progress_bar = tqdm(
-            desc="Training progress", total=n_epochs, initial=1
+            desc="Training progress", total=n_epochs, initial=0
         )
         for epoch in range(n_epochs):
-            train_samples, train_loss = self._train_epoch(train_loader)
-            samples_processed += train_samples
+            train_loss = self._train_epoch(train_loader)
             self.train_losses.append(train_loss)
 
-            _, val_loss = self._validation_epoch(val_loader)
+            val_loss = self._validation_epoch(val_loader)
             self.validation_losses.append(val_loss)
             
             progress_bar.update(1)
@@ -264,7 +262,7 @@ class C2TM:
             word_dist2 = self.decoder(z2, self.language2)
 
             # Backward pass
-            loss = self._loss(
+            loss = -self._elbo(
                 mu1, mu2,
                 log_sigma1, log_sigma2,
                 word_dist1, word_dist2,
@@ -280,7 +278,7 @@ class C2TM:
 
         train_loss /= samples_processed
 
-        return samples_processed, train_loss
+        return train_loss
     
     def _validation_epoch(self, loader):
         # Put networks in inference mode
@@ -314,7 +312,7 @@ class C2TM:
             word_dist2 = self.decoder(z2, self.language2)
 
             # Backward pass
-            loss = self._loss(
+            loss = -self._elbo(
                 mu1, mu2,
                 log_sigma1, log_sigma2,
                 word_dist1, word_dist2,
@@ -322,15 +320,15 @@ class C2TM:
                 z1, z2
             ).sum()
 
-            # Compute training loss
+            # Compute validation loss
             samples_processed += bow1.size()[0]
             val_loss += loss.item()
 
         val_loss /= samples_processed
 
-        return samples_processed, val_loss
+        return val_loss
     
-    def _loss(
+    def _elbo(
             self,
             mu1, mu2,
             log_sigma1, log_sigma2,
@@ -356,7 +354,7 @@ class C2TM:
 
         CL = self._infoNCE(z1, z2, self.temperature)
 
-        return (KL1 + KL2 - RE1 - RE2 + CL).sum()
+        return (RE1 - KL1 + RE2 - KL2 + CL).sum()
 
     def _infoNCE(self, z1, z2, tau):
         sim11 = self.similarity(z1.unsqueeze(-2), z1.unsqueeze(-3)) / tau
